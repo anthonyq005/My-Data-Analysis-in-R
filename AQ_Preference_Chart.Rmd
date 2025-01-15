@@ -1,0 +1,185 @@
+---
+title: "AQ_Preference_Chart"
+output: html_document
+date: "2024-11-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(dbplot)
+library(stringr)
+library(tidyr)
+library(GGally)
+library(skimr)
+library(moderndive)
+library(readxl)
+ 
+#setwd("C:/Users/lab/OneDrive - University of Massachusetts (2)/Anthony R Files/Data Files")
+```
+
+Importing Data
+
+```{r}
+library(readr)
+master_liqhd_data <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/master_liqhd_data.csv")
+tail(master_liqhd_data)
+
+master_liqhd_data <- read_csv("master_liqhd_data.csv")
+
+
+#liqhd_data3c <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24112001.CSV")
+
+#liqhd_data3d <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24112200.CSV",  col_select = -...220)
+
+#liqhd_data4a <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24112500.CSV",  col_select = -...220)
+
+#liqhd_data4b <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24112700.CSV",  col_select = -...220)
+
+liqhd_data5a <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24110800.CSV",  col_select = -...220)
+
+#liqhd_data3c %>%
+  mutate(datetime = ymd_hms(datetime)) -> liqhd_data3c
+
+#liqhd_data3d %>%
+  mutate(datetime = ymd_hms(datetime)) -> liqhd_data3d
+
+#liqhd_data4a %>%
+  mutate(datetime = ymd_hms(datetime)) -> liqhd_data4a
+
+#liqhd_data4b %>%
+  mutate(datetime = ymd_hms(datetime)) -> liqhd_data4b
+
+# Added new data to master tibble
+rbind(master_liqhd_data, liqhd_data5a) -> master_liqhd_data
+
+
+
+
+### COMBINES ALL NEW DATA WITH OLD
+write_csv(master_liqhd_data, file = "master_liqhd_data.csv")
+
+```
+
+
+Manipulating master data tibble
+ 
+```{r}
+master_liqhd_data %>%
+  select(-Experimental_side, -millis) -> master_liqhd_data_values
+
+master_liqhd_data_values %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") -> master_liqhd_longer
+
+```
+ 
+Modifying the long data by adding columns for name, exp side, and mouse id. Basically everything we need to be able to differentiate every row.
+
+```{r}
+master_liqhd_longer %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> master_liqhd_longer
+
+
+# Parsing out an hour, day, month column. I am going to be using this to condense the data down for every hour rather than every minute
+
+#master_liqhd_longer %>%
+  #mutate(hour = hour(datetime)) %>%
+  #mutate(day = day(datetime)) %>%
+  #mutate(month = month(datetime)) %>%
+  #mutate(year = year(datetime)) -> master_liqhd_longer
+
+# Simplified code
+master_liqhd_longer %>%
+  mutate(hour = floor_date(datetime, "hour")) -> master_liqhd_longer
+```
+
+Condensing master_liqhd_longer down to one data observation per hour
+
+```{r}
+
+# This tibble has total licks SEPARATED between left and right sides
+master_liqhd_longer %>%
+  filter(measure_type == "LickNumber") %>%
+  filter(mouse_id != 18) %>%
+  group_by(hour, exp_side) %>%
+  summarize(total_value = sum(values)) -> liqhd_licks_hour
+
+# This tibble is half the size of the one right above
+# This contains an ONLY TOTAL VALUES column that adds up values regardless of exp side
+master_liqhd_longer %>%
+  filter(measure_type == "LickNumber") %>%
+  filter(mouse_id != 18) %>%
+  group_by(hour) %>%
+  summarize(total_value = sum(values)) -> liqhd_licks_hour_total
+```
+
+Converting my hourly totals tibble into proportions instead of numbers
+
+```{r}
+left_join(liqhd_licks_hour, liqhd_licks_hour_total, by = c("hour")) %>%
+  rename(value = total_value.x) %>%
+  rename(total_value = total_value.y) %>%
+  mutate(value = value/total_value) -> licks_by_hour_props
+```
+
+(UNNECESSARY)
+Starting the preference chart
+Separating Left and Right
+
+```{r}
+#licks_by_hour_props %>%
+  #filter(exp_side == "L") -> licks_hour_props_LEFT
+
+#licks_by_hour_props %>%
+  #filter(exp_side == "R") -> licks_hour_props_RIGHT
+
+
+```
+
+
+
+
+```{r}
+# Left Preference ONLY
+
+#preference_chart <- licks_hour_props_LEFT %>%
+  #ggplot() +
+  #geom_point(mapping = aes(x = hour, y = value))
+
+#preference_chart
+
+# Right Preference ONLY
+
+#preference_chart <- licks_hour_props_RIGHT %>%
+ #ggplot() +
+  #geom_point(mapping = aes(x = hour, y = value)) 
+
+#preference_chart
+
+# Preference for BOTH
+preference_chart <- licks_by_hour_props %>%
+  ggplot() +
+  geom_line(mapping = aes(x = hour, y = value, color = exp_side), size = 0.75) +
+  labs(title = "Preference % Left vs. Right Side",
+       x = "Date",
+       y = "Side Preference (%)",
+       color = "Experimental Side") +
+  theme_bw() +
+  scale_x_datetime(date_breaks = "1440 min", date_labels = "%m/%d") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_line(aes(y = 0.5))
+
+preference_chart
+
+#ggsave("preference_chart.png", plot = preference_chart)
+#which(licks_by_hour_props$value <= 0)
+#licks_by_hour_props[3053,]
+```
+
+

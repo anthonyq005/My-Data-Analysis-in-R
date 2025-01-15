@@ -1,0 +1,390 @@
+---
+title: "STATS310_Project"
+output: pdf_document
+date: "2024-12-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(infer)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(tidyr)
+library(forcats)
+library(readr)
+```
+
+
+Importing data 
+
+```{r}
+library(readr)
+philly_data <- read_csv("pa_philadelphia_2020_04_01.csv")
+
+nj_statewide_data <-  read_csv("nj_statewide_2020_04_01.csv")
+
+# Creating county data files so its easier to load for next time. 
+write_csv(gloucester_county_data, "gloucester_county_data.csv")
+write_csv(cumberland_county_data, "cumberland_county_data.csv")
+write_csv(capemay_county_data, "capemay_county_data.csv")
+write_csv(salem_county_data, "salem_county_data.csv")
+write_csv(camden_data, "camden_city_data.csv")
+
+gloucester_county_data <- read_csv("gloucester_county_data.csv")
+cumberland_county_data <- read_csv("cumberland_county_data.csv")
+capemay_county_data <- read_csv("capemay_county_data.csv")
+salem_county_data <- read_csv("salem_county_data.csv")
+camden_data <- read_csv("camden_city_data.csv")
+
+
+```
+Filtering NJ data by the counties we want.
+Because the dataset doesn't have a county column, we are grouping 3 of the largest townships (in terms of pop) in each county to represent that county.
+
+```{r}
+camden_data <- nj_statewide_data %>%
+  filter(raw_TOWNSHIP == "Camden City")
+
+gloucester_county_data <- nj_statewide_data %>%
+  filter(raw_TOWNSHIP == "Washington Twp" |raw_TOWNSHIP == "Monroe Twp"  | raw_TOWNSHIP == "Deptford Twp")
+
+cumberland_county_data <- nj_statewide_data %>%
+  filter(raw_TOWNSHIP == "Commercial Twp" |raw_TOWNSHIP == "Deerfield Twp"  | raw_TOWNSHIP == "Fairfield Twp")
+
+capemay_county_data <- nj_statewide_data %>%
+  filter(raw_TOWNSHIP == "Lower Twp" |raw_TOWNSHIP == "Middle Twp")
+
+salem_county_data <- nj_statewide_data %>%
+  filter(raw_TOWNSHIP == "Pennsville Twp" |raw_TOWNSHIP == "Pittsgrove Twp"  | raw_TOWNSHIP == "Carneys Point Twp")
+
+
+```
+
+Manipulating philly tibble to only look at black and white races
+
+```{r}
+philly_data %>% 
+  select(raw_row_number, date, subject_race, raw_race, arrest_made, search_conducted) -> philly_data
+
+philly_data %>% 
+  filter(subject_race == "white" | subject_race == "black") %>% 
+  filter(date >= '2016-01-01' & date < '2017-01-01') %>%   
+  mutate(arrest_made = as.numeric(arrest_made)) %>% 
+  mutate(search_conducted = as.numeric(search_conducted)) -> philly_data
+
+philly_white_data <- philly_data %>% 
+  filter(subject_race == "white")
+
+philly_black_data <- philly_data %>%
+  filter(subject_race == "black")
+
+```
+
+
+Finding prop of each race searched for every county
+
+```{r}
+#unique(gloucester_county_data$search_conducted)
+
+# Assume if search_conducted is NA, then there is no search
+
+gloucester_county_data %>%
+  filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  mutate(search_conducted = if_else(is.na(search_conducted) | search_conducted == FALSE, 0, 1)) %>%
+  group_by(raw_RACE) %>%
+  summarize(mean(search_conducted)) -> gloucester_search_prop
+
+cumberland_county_data %>%
+    filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  mutate(search_conducted = if_else(is.na(search_conducted)| search_conducted == FALSE, 0, 1)) %>%
+  group_by(raw_RACE) %>%
+  summarize(mean(search_conducted)) -> cumberland_search_prop
+
+capemay_county_data %>%
+    filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  mutate(search_conducted = if_else(is.na(search_conducted)| search_conducted == FALSE, 0, 1)) %>%
+  group_by(raw_RACE) %>%
+  summarize(mean(search_conducted)) -> capemay_search_prop
+
+salem_county_data %>%
+    filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  mutate(search_conducted = if_else(is.na(search_conducted)| search_conducted == FALSE, 0, 1)) %>%
+  group_by(raw_RACE) %>%
+  summarize(mean(search_conducted)) -> salem_search_prop
+
+camden_data %>%
+    filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  mutate(search_conducted = if_else(is.na(search_conducted)| search_conducted == FALSE, 0, 1)) %>%
+  group_by(raw_RACE) %>%
+  summarize(mean(search_conducted)) -> camden_search_prop
+
+
+```
+
+
+
+
+
+
+
+Finding proportion of searches for black and white in Philly
+
+```{r}
+philly_white_data %>%
+  summarize(white_search_prop = mean(search_conducted))
+
+# 0.05522
+
+philly_black_data %>%
+  summarize(black_search_prop = mean(search_conducted))
+# 0.06309
+```
+
+
+Making confidence interval
+
+```{r}
+camden_data %>%
+  rep_sample_n(reps = 1000, replace = T, size = 50) -> camden_boot_samp
+
+philly_black_data %>%
+   rep_sample_n(reps = 1000, replace = T, size = 50) -> philly_black_boot
+
+black_boot_props <- philly_black_boot %>%
+  group_by(replicate) %>%
+  summarize(black_search_prop = mean(search_conducted))
+
+
+```
+
+Plotting Bootstrap Sample
+
+```{r}
+ggplot(black_boot_props, aes(x = black_search_prop)) +
+  geom_histogram(fill = "darkseagreen3", bins = 10, color = "white") + 
+  xlab("Black Search Proportions in Bootstrap Samples") + 
+  ylab("Frequency") + 
+  theme_bw()
+
+```
+
+Confidence Interval
+
+```{r}
+quantile(black_boot_props$black_search_prop, c(0.05, 0.95) )
+
+```
+
+New Jersey Stuff
+
+```{r}
+nj_counties <- rbind(gloucester_county_data, cumberland_county_data, capemay_county_data, salem_county_data)
+
+# Filtering by only white and black race, and data from 2016
+nj_counties %>% 
+ filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  filter(date >= '2016-01-01' & date < '2017-01-01') %>%   
+  mutate(search_conducted = if_else(is.na(search_conducted)| search_conducted == FALSE, 0, 1)) %>%
+  group_by(raw_RACE) %>%
+  summarize(mean(search_conducted)) -> nj_counties_search_prop
+  
+```
+
+```{r}
+
+
+g <- ggplot(nj_counties_search_prop, aes(x = raw_RACE, y = `mean(search_conducted)`, fill = raw_RACE)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "Search Rate by Race For NJ Counties (2016)",
+       x = "Race",
+       y = "Search Rate") +
+  theme_minimal() +
+  scale_y_continuous(breaks = seq(0, max(nj_counties_search_prop$`mean(search_conducted)`), by = 0.01)) + # Add more y-axis labels
+  scale_fill_manual(values = c("White" = "blue", "Black" = "green"))
+
+ggsave("nj_counties_search_rate.png", plot = g )
+
+
+```
+```{r}
+ggplot(camden_search_prop, aes(x = raw_RACE, y = `mean(search_conducted)`, fill = raw_RACE)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "Search Rate by Race For NJ Counties (2016)",
+       x = "Race",
+       y = "Search Rate") +
+  theme_minimal() -> g2
+
+ggsave("camden_search_prop.png", plot = g2 )
+```
+BOOTSTRAPS FOR NJ COUNTIES
+
+```{r}
+nj_counties <- nj_counties %>% 
+ filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  filter(date >= '2016-01-01' & date < '2017-01-01') %>%   
+  mutate(search_conducted = if_else(is.na(search_conducted)| search_conducted == FALSE, 0, 1)) 
+
+nj_counties_black <- nj_counties %>%
+  filter(raw_RACE == "B - BLACK")
+
+nj_counties_white <- nj_counties %>%
+  filter(raw_RACE == "W - WHITE")
+
+
+
+```
+
+Test stats for black and white in CAMDEN
+
+```{r}
+nj_counties_black %>%
+  summarize(black_search_prop = mean(search_conducted))
+
+# 0.0733
+
+nj_counties_white %>%
+  summarize(white_search_prop = mean(search_conducted))
+# 0.0288
+
+```
+
+Bootstraps
+
+```{r}
+nj_counties_black %>%
+  rep_sample_n(size = nrow(nj_counties_black), replace = TRUE, reps = 1000) -> bootstrap_samples
+
+black_boot_props <- bootstrap_samples %>%
+  group_by(replicate) %>%
+  summarize(black_search_prop = mean(search_conducted))
+
+ggplot(black_boot_props, aes(x = black_search_prop)) +
+  geom_histogram(fill = "darkseagreen3", bins = 10, color = "white") + 
+  xlab("Black Search Proportions in Bootstrap Samples") + 
+  ylab("Frequency") + 
+  theme_bw() -> g3
+g3
+
+ggsave("njcounties_bootstrap_distrib.png", plot = g3)
+
+quantile(black_boot_props$black_search_prop, c(0.05, 0.95) )
+
+```
+
+```{r}
+nj_counties_white %>%
+  rep_sample_n(size = nrow(nj_counties_white), replace = TRUE, reps = 1000) -> bootstrap_samples
+
+white_boot_props <- bootstrap_samples %>%
+  group_by(replicate) %>%
+  summarize(white_search_prop = mean(search_conducted))
+
+ggplot(white_boot_props, aes(x = white_search_prop)) +
+  geom_histogram(fill = "darkseagreen3", bins = 10, color = "white") + 
+  xlab("White Search Proportions in Bootstrap Samples") + 
+  ylab("Frequency") + 
+  theme_bw() -> g4
+
+g4
+ggsave("njcounties_bootstrap_distrib_WHITE.png", plot = g4)
+
+
+quantile(white_boot_props$white_search_prop, c(0.05, 0.95) )
+
+```
+
+BOOTSTRAP FOR CAMDEN
+
+```{r}
+camden_data %>% 
+  filter(raw_RACE == "W - WHITE" | raw_RACE == "B - BLACK") %>%
+  filter(date >= '2016-01-01' & date < '2017-01-01') %>%   
+  mutate(search_conducted = if_else(is.na(search_conducted)| search_conducted == FALSE, 0, 1)) -> camden_data
+
+
+camden_data %>%
+  filter(raw_RACE == "B - BLACK") -> camden_black
+
+camden_data %>%
+  filter(raw_RACE == "W - WHITE") -> camden_white
+
+camden_black %>%
+  rep_sample_n(size = nrow(camden_black), replace = TRUE, reps = 1000) -> camden_black_bootstrap
+
+camden_black_boot_props <- camden_black_bootstrap %>%
+  group_by(replicate) %>%
+  summarize(black_search_prop = mean(search_conducted))
+
+ggplot(camden_black_boot_props, aes(x = black_search_prop)) +
+  geom_histogram(fill = "darkseagreen3", bins = 10, color = "white") + 
+  xlab("Black Search Proportions in Bootstrap Samples") + 
+  ylab("Frequency") + 
+  theme_bw() -> camden_black_boot_graph
+camden_black_boot_graph
+
+ggsave("camden_black_bootstrap.png", camden_black_boot_graph)
+
+quantile(camden_black_boot_props$black_search_prop, c(0.05, 0.95) )
+
+
+
+```
+
+CAMDEN WHITE BOOTSTRAP
+
+```{r}
+
+camden_white %>%
+  rep_sample_n(size = nrow(camden_white), replace = TRUE, reps = 1000) -> camden_white_bootstrap
+
+camden_white_boot_props <- camden_white_bootstrap %>%
+  group_by(replicate) %>%
+  summarize(white_search_prop = mean(search_conducted))
+
+ggplot(camden_white_boot_props, aes(x = white_search_prop)) +
+  geom_histogram(fill = "darkseagreen3", bins = 10, color = "white") + 
+  xlab("White Search Proportions in Bootstrap Samples") + 
+  ylab("Frequency") + 
+  theme_bw() -> camden_white_boot_graph
+camden_white_boot_graph
+
+ggsave("camden_white_bootstrap.png", camden_white_boot_graph)
+
+quantile(camden_white_boot_props$white_search_prop, c(0.05, 0.95) )
+
+```
+
+Philly hypothesis test
+
+```{r}
+# Philly is already filtered for only black and white
+
+philly_data %>%
+  group_by(subject_race) %>%
+  summarize(prop_searched = mean(search_conducted)) -> observed_props
+
+# Extract observed proportion for Black
+observed_black_prop <- observed_props %>%
+  filter(subject_race == "black") %>%
+  pull(prop_searched)
+
+# Extract observed proportion for White
+observed_white_prop <- observed_props %>%
+  filter(subject_race == "white") %>%
+  pull(prop_searched)
+
+observed_diff <- observed_black_prop - observed_white_prop
+
+# Null distribution for difference in proportions (assuming no race effect)
+null_distribution <- philly_data %>%
+  specify(response = search_conducted) %>%
+  hypothesize(null = "paired independence") %>%
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "mean")
+
+
+```
+
+
+
