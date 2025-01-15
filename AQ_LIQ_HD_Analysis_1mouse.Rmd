@@ -1,0 +1,323 @@
+---
+title: "AQ_LIQ_HD_Analysis_For_1_Mouse"
+output: html_document
+date: "2024-10-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+```
+*** IMPORTANT THINGS TO KNOW ***
+
+For this device, bout number is defined as the number of times the photobeam was interrupted
+Bout duration is the amount of time the beam was broken. 
+Data were collected in 1-min increments.
+
+
+Lick number is defined as the number of times the animal licked the sipper, 
+while lick duration is defined as the actual contact time on the sipper.
+
+
+
+Importing modified data set
+```{r}
+library(readr)
+# Directory for my laptop
+Mouse1 <- read_csv("LIQHD_Mouse1.csv")
+
+
+##### SETTING UP THE DATA #####
+
+# Directory for LAB PC
+Mouse1 <- read_csv("LIQHD_Mouse1.csv")
+View(Mouse1)
+
+# IMPORTING OG DATA
+LIQ_HD_240719 <- read_csv("LIQ HD 7.19.24 (1).csv")
+
+# Adding millis column to Mouse1 data from OG data
+Mouse1 %>%
+  mutate(millis = LIQ_HD_240719$millis) -> Mouse1
+
+Mouse1 %>%
+  select(DateTime, Time, ExperimentalSide, millis, everything()) -> Mouse1
+
+# Turning DateTime into date type variable
+Mouse1 %>% 
+  mutate(DateTime = ymd_hms(DateTime)) -> Mouse1
+
+```
+Making the graph/plots for the data. Goal is to replicate the number of licks over time graph made in LIQ-HD Software. Also make a graph plotting preference percentage.
+
+
+
+EXPERIMENTAL GROUP
+Graphing the number of ALCOHOL licks over time
+
+```{r}
+# Looking at variable type for each column
+head(Mouse1)
+
+# Graphing Alcohol Licks over time
+
+
+alc_licks_time <- Mouse1 %>%  # Pipe data into ggplot function
+  ggplot(mapping = aes(x = DateTime, y = LickNumberLeft)) + geom_line(size = 0.75, color = "orange") +
+  labs(                   # Adding labels
+    x = "Time (minutes)",
+    y = "Number of Licks",
+    title = "Number of licks over time (Experimental Bottle)",
+    subtitle = "test"
+  ) + 
+  theme_bw() + # Changes theme of graph
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # Rotates x axis labels
+  scale_x_datetime(date_breaks = "10 min", date_labels = "%H:%M") + # breaks x axis into 10 min intervals
+  expand_limits(y = 130) +
+  scale_y_continuous(breaks = seq(0, 130, by= 25))
+
+  
+
+alc_licks_time
+
+#ggsave("alc_licks_time.png", plot = alc_licks_time)
+```
+
+
+
+CONTROL GROUP
+Plotting the number of WATER licks over time
+
+```{r}
+
+# Graphing Water Licks over time
+water_licks_time <- Mouse1 %>% 
+  ggplot(mapping = aes(x = DateTime, y = LickNumberRight)) + geom_line(size = 0.75, color = "blue") +
+  labs(                  
+    x = "Time (minutes)",
+    y = "Number of Licks",
+    title = "Number of licks over time (Control Bottle)",
+    subtitle = "test"
+  ) + 
+  theme_bw() + # Changes theme of graph
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_datetime(date_breaks = "10 min", date_labels = "%H:%M") +
+  expand_limits(y = 130) +
+  scale_y_continuous(breaks = seq(0, 130, by = 25))
+
+  
+water_licks_time
+
+#ggsave("water_licks_time.png", plot = water_licks_time)
+```
+
+
+
+
+Overlaying control and experimental groups into one graph (COMBINED graph)
+```{r}
+combined <- Mouse1 %>%  
+  ggplot() +
+  geom_line(mapping = aes(x = DateTime, y = LickNumberLeft), color = "orange", size = 0.75) +
+  geom_line(mapping = aes(x = DateTime, y = LickNumberRight), color = "blue", size = 0.75) +
+   labs(                   
+    x = "Time (minutes)",
+    y = "Number of Licks",
+    title = "Number of licks over time (Control Bottle)",
+    subtitle = "test") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_datetime(date_breaks = "10 min", date_labels = "%H:%M") 
+
+combined
+
+
+#ggsave("alc_and_water_over_time.png", plot = combined)
+```
+
+
+Plotting for Lick Duration vs.Time
+
+
+EXPERIMENTAL GROUP
+```{r}
+alc_duration_time <- Mouse1 %>% 
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = LickDurationLeft))
+
+alc_duration_time
+
+#ggsave("alc_lickduration_time.png", plot = alc_duration_time)
+```
+
+
+CONTROL GROUP
+```{r}
+water_duration_time <- Mouse1 %>%
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = LickDurationRight))
+
+water_duration_time
+
+#ggsave("water_lickduration_time.png", plot = water_duration_time)
+```
+
+
+Plotting for Bout Number vs. Time 
+
+EXPERIMENTAL GROUP
+
+```{r}
+alc_bout_num <- Mouse1 %>%
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = BoutNumberLeft))
+
+alc_bout_num
+
+#ggsave("alc_boutNum_time.png", plot = alc_bout_num)
+```
+
+CONTROL GROUP
+
+```{r}
+water_bout_num <- Mouse1 %>%
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = BoutNumberRight))
+
+water_bout_num
+
+#ggsave("water_boutNum_time.png", plot = water_bout_num)
+
+```
+
+Plotting Bout Duration vs. Time
+
+EXPERIMENTAL GROUP
+```{r}
+alc_bout_duration_time <- Mouse1 %>%
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = BoutLickDurationLeft))
+
+alc_bout_duration_time
+
+#ggsave("alc_boutduration_time.png", plot = alc_bout_duration_time)
+
+```
+
+CONTROL GROUP
+
+```{r}
+water_bout_duration_time <- Mouse1 %>%
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = BoutLickDurationRight))
+
+water_bout_duration_time
+
+ggsave("water_boutduration_time.png", plot = water_bout_duration_time)
+
+```
+Plotting Lick Frequency (Bout Lick Number / Bout Duration) over time
+EXPERIMENTAL GROUP
+
+```{r}
+names(LIQ_HD_240719)
+
+Mouse1 %>%
+  mutate(LickFreqLeft = ifelse(BoutDurationLeft != 0, BoutLickNumberLeft / BoutDurationLeft, 0)) -> Mouse1
+
+
+alc_freq_time  <- Mouse1 %>%
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = LickFreqLeft))
+
+alc_freq_time
+
+#ggsave("alc_lickfreq_time.png", plot = alc_freq_time)
+
+
+```
+
+CONTROL GROUP
+
+```{r}
+
+Mouse1 %>%
+  mutate(LickFreqRight = ifelse(BoutDurationRight != 0, BoutLickNumberRight / BoutDurationRight, 0)) -> Mouse1
+
+water_freq_time <- Mouse1 %>%
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = LickFreqRight))
+
+water_freq_time
+
+ggsave("water_lickfreq_time.png", plot = water_freq_time)
+```
+
+Attempting a raster plot with geom_point
+```{r}
+
+
+bout_time_raster <- Mouse1 %>% 
+  ggplot() +
+  geom_point(mapping = aes(x = DateTime, y = ))
+```
+
+**Check out dbplot package
+
+```{r}
+library(dbplot)
+library(ggplot2)
+library(dplyr)
+```
+
+Example Raster Plot
+
+```{r}
+
+# Returns a 100x100 raster plot of record count of intersections of eruptions and waiting
+
+faithful %>% dbplot_raster(eruptions, waiting)
+
+
+# Returns a 50x50 raster plot of eruption averages of intersections of eruptions and waiting 
+
+faithful %>% dbplot_raster(eruptions, waiting, fill = mean(eruptions), resolution = 50)
+View(faithful)
+
+
+# Returns a 100x100 grid of record count of intersections of eruptions and waiting 
+
+faithful %>% db_compute_raster(eruptions, waiting) 
+
+# Returns a 50x50 grid of eruption averages of intersections of eruptions and waiting 
+
+faithful %>% db_compute_raster2(eruptions, waiting, fill = mean(eruptions), resolution = 50)
+```
+
+
+
+
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

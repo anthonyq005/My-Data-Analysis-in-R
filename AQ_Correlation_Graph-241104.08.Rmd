@@ -1,0 +1,558 @@
+---
+title: "AQ_Correlation_Graph-241104.08"
+output: pdf_document
+date: "2024-11-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(dbplot)
+library(stringr)
+library(tidyr)
+library(GGally)
+library(skimr)
+library(moderndive)
+library(readxl)
+ 
+#setwd("C:/Users/lab/OneDrive - University of Massachusetts (2)/Anthony R Files/Data Files")
+```
+
+IMPORTING DATA
+
+```{r}
+library(readr)
+
+# First 4 day period
+liqhd_data1a <- read_csv("24110401.CSV")
+liqhd_data1b <- read_csv("24110500.CSV")
+liqhd_data1c <- read_csv("24110700.CSV")
+
+# Second 4 day period
+liqhd_data2a <- read_csv("24111201.CSV")
+
+
+# Bottle weights data looks like this because I manipulated it in Excel
+bottle_weights <- read_csv("Bottle_weights.csv")
+
+### Importing Data for PC
+
+liqhd_data1a <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24110401.CSV", col_select = -...220)
+liqhd_data1b <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24110500.CSV", col_select = -...220)
+liqhd_data1c <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24110700.CSV", col_select = -...220)
+
+
+liqhd_data2a <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24111201.CSV")
+
+liqhd_data3a <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24111800.CSV")
+liqhd_data3b <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/24112000.CSV")
+
+
+
+
+bottle_weights <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/Bottle_weights.csv")
+
+
+# New approach so that adding more data will be easier
+# I am combining all liqhd data into one big master dataset as they come in
+
+rbind(liqhd_data1a, liqhd_data1b, liqhd_data1c, liqhd_data2a, liqhd_data3a, liqhd_data3b) -> master_liqdata
+
+master_liqdata %>%
+  mutate(datetime = ymd_hms(datetime)) -> master_liqdata
+
+
+
+master_liqdata <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/master_liqhd_data.csv")
+
+write_csv(master_liqdata, file = "master_liqhd_data.csv")
+
+```
+Testing out Matricies
+
+```{r}
+matrix(c(1,2,3,4,5,6), byrow = T, nrow = 3,ncol = 2)
+```
+
+CREATING TOTALS TIBBLE
+
+```{r}
+
+tail(master_liqdata)
+
+# Simply filter by date to get data for each 4 day period
+
+master_liqdata %>%
+  filter(datetime <= ymd_hms("2024-11-04 23:59:00")) %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_11_4
+
+master_liqdata %>%
+  filter(datetime >= ymd_hms("2024-11-05 00:00:00") & datetime <= ymd_hms("2024-11-08 23:59:00")) %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_11_8
+
+master_liqdata %>%
+  filter(datetime >= ymd_hms("2024-11-09 00:00:00") & datetime <= ymd_hms("2024-11-12 23:59:00")) %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_11_12
+
+master_liqdata %>%
+  filter(datetime >= ymd_hms("2024-11-13 00:00:00") & datetime <= ymd_hms("2024-11-15 23:59:00")) %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_11_15
+
+master_liqdata %>%
+  filter(datetime >= ymd_hms("2024-11-16 00:00:00") & datetime <= ymd_hms("2024-11-18 23:59:00")) %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_11_18
+
+
+
+
+###############################################################################################################################
+
+
+### (OLD CODE)
+liqhd_data1a %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_1a
+
+liqhd_data1b %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_1b
+
+liqhd_data1c %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum)) -> totals_1c
+
+liqhd_data2a %>%
+  select(-Experimental_side, -millis, -datetime) %>%
+  summarize(across(everything(), sum, na.rm = T)) -> totals_2a
+
+
+totals_1a + totals_1b + totals_1c -> grand_totals_1
+
+
+```
+
+(UNNECESSARY)
+MANIPULATING TOTALS TIBBLE
+
+```{r}
+
+### Splitting totals between left and right sides
+
+grand_total %>%
+  select(matches("\\d*[13579]\\b")) -> totals_LEFT 
+
+#write.csv(totals_LEFT, file = "totals_LEFT.csv")
+
+grand_total %>%
+  select(matches("\\d*[24680]\\b")) -> totals_RIGHT
+
+
+# Making a loop to turn 1 x 36 tibble into 2 x 18
+
+result = matrix(NA, nrow = 18, ncol = 2)
+i <- 1
+while(i <= 36) {
+  new_row <- grand_total %>% 
+    select(i, i + 1) %>% 
+    unlist() %>% 
+    unname()
+  result[i %/% 2, ] <- new_row
+  i <- i + 2
+}
+
+matrix(as.numeric(grand_total)[ 1:36], ncol = 2, byrow = T)
+
+
+#write.csv(result, file = 'result.csv')
+```
+
+
+
+
+
+Final Step to make updated totals tibble
+
+```{r}
+
+
+pivot_longer(totals_11_4, cols = everything(), names_to = "names", values_to = "values") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(Date = ymd("2024-11-04")) -> totals_11_4 
+
+pivot_longer(totals_11_8, cols = everything(), names_to = "names", values_to = "values") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(Date = ymd("2024-11-08")) -> totals_11_8
+
+pivot_longer(totals_11_12, cols = everything(), names_to = "names", values_to = "values") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(Date = ymd("2024-11-12")) -> totals_11_12
+
+pivot_longer(totals_11_15, cols = everything(), names_to = "names", values_to = "values") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(Date = ymd("2024-11-15")) -> totals_11_15
+
+pivot_longer(totals_11_18, cols = everything(), names_to = "names", values_to = "values") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(Date = ymd("2024-11-18")) -> totals_11_18 
+
+
+
+### OLD CODE
+### Organized Totals Tibble
+
+pivot_longer(grand_totals_1, cols = everything(), names_to = "names", values_to = "values") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% # parse_number extracts any numbers found in column name
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(Date = ymd("2024-11-08")) -> updated_totals_1 # gsub removes any numbers in the column name
+
+pivot_longer(totals_2a, cols = everything(), names_to = "names", values_to = "values") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% # parse_number extracts any numbers found in column name
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(Date = ymd("2024-11-12"))-> updated_totals_2
+
+```
+
+
+
+
+Creating bottle weight difference column using lag() function
+
+```{r}
+
+bottle_weights %>% 
+  mutate(Date = mdy(Date)) %>%
+  group_by(`Cage #`) %>% 
+  mutate(weight_diff_left = -1 * (`Left Bottle` - lag(`Left Bottle`, 1))) %>% 
+  mutate(weight_diff_right = -1 *(`Right Bottle` - lag(`Right Bottle`, 1))) %>% 
+  rename(mouse_id = `Cage #`) -> bottle_weights
+
+# I am filtering for only dates we are interested in
+bottle_weights %>%
+  filter(Date >= "2024-11-08") %>%
+  filter(Action != "Refill") -> bottle_weights # Remove refilled bottle data because we don't need it
+
+
+# Created extra column to differentiate the experimental side
+
+bottle_weights %>%
+  mutate(exp_side = "L") %>%
+  select(Date, `mouse_id`, exp_side, `Left Bottle`, weight_diff_left) %>% 
+  rename(bottle_weights = `Left Bottle`, weight_diff = weight_diff_left) -> bottle_weights_left
+bottle_weights %>%
+  mutate(exp_side = "R") %>%
+  select(Date, `mouse_id`, exp_side,  `Right Bottle`, weight_diff_right) %>% 
+  rename(bottle_weights = `Right Bottle`, weight_diff = weight_diff_right) -> bottle_weights_right
+
+### This makes it so that bottle weight and weight diff have their own column. 
+
+bind_rows(bottle_weights_left, bottle_weights_right) %>% group_by(mouse_id) -> bottle_weights
+```
+
+
+
+
+
+Create a column that specifies experimental side
+
+```{r}
+
+# Adding column that specifies Left and Right side
+
+totals_11_8 %>% 
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(Date, mouse_id, exp_side, measure_type, values) -> totals_11_8
+
+totals_11_12 %>% 
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(Date, mouse_id, exp_side, measure_type, values) -> totals_11_12
+
+totals_11_15 %>% 
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(Date, mouse_id, exp_side, measure_type, values) -> totals_11_15
+
+totals_11_18 %>% 
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(Date, mouse_id, exp_side, measure_type, values) -> totals_11_18
+
+
+
+
+
+# OLD CODE
+### After turning OG data set into a tidy format, split totals between left and right
+updated_totals %>% 
+  mutate(exp_side = "R") %>%
+  filter(parse_number(names) %% 2 == 0) %>% 
+  select(mouse_id, exp_side, measure_type, values) -> upd_totals_RIGHT
+
+updated_totals %>% 
+  mutate(exp_side = "L") %>%
+  filter(parse_number(names) %% 2 != 0) %>% 
+  select(mouse_id, exp_side, measure_type, values)-> upd_totals_LEFT
+
+### Join Left and Right sides together
+bind_rows(upd_totals_LEFT, upd_totals_RIGHT) %>%
+  group_by(mouse_id) -> upd_totals_mod
+
+### FASTER METHOD
+# Instead of splitting, I can add exp side directly based on the number inside names
+
+updated_totals_1 %>% 
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(Date, mouse_id, exp_side, measure_type, values) -> updated_totals_1
+
+updated_totals_2 %>% 
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(Date, mouse_id, exp_side, measure_type, values) -> updated_totals_2
+
+
+
+
+```
+
+
+Slicing the data frame for the part we are interested in (LickNumber) 
+
+```{r}
+# Filtering each totals dataset for just lick number values
+totals_11_8 %>%
+  filter(measure_type == "LickNumber") -> totals_11_8_licknum
+
+totals_11_12 %>%
+  filter(measure_type == "LickNumber") -> totals_11_12_licknum
+
+totals_11_15 %>%
+  filter(measure_type == "LickNumber") -> totals_11_15_licknum
+
+totals_11_18 %>%
+  filter(measure_type == "LickNumber") -> totals_11_18_licknum
+
+# Putting ONLY Lick Numbers in a single tibble
+rbind(totals_11_8_licknum, totals_11_12_licknum, totals_11_15_licknum, totals_11_18_licknum) -> licknums
+
+# joining bottle weights and lick nums
+left_join(licknums, bottle_weights) -> totlicknum_and_bottle_weight
+
+
+# OLD CODE
+### Slicing data frames for part we are interested in
+updated_totals_1 %>%
+  filter(measure_type == "LickNumber") -> updated_totals_LICKNUM
+
+# Totals from the next 4 day period
+updated_totals_2 %>%
+  filter(measure_type == "LickNumber") -> updated_totals2_LICKNUM
+
+# Combining with prev. period
+bind_rows(updated_totals_LICKNUM, updated_totals2_LICKNUM) -> LICKNUM
+
+
+# Filtering bottle weights for the dates we are interested in
+bottle_weights %>%
+  filter(Date >= "2024-11-08" & Date <= "2024-11-12")-> bottle_weights11.08
+
+#left_join(upd_totals_mod_LICKNUM, bottle_weights11.08) -> totlicknum_and_bottle_weight
+
+
+# New code
+# TODO: Problems with this code 
+
+left_join(LICKNUM, bottle_weights11.08) -> totlicknum_and_bottle_weight
+```
+
+
+Plotting scatter plot between Total Lick Number and Bottle Weight Change
+
+
+```{r}
+### Plotting Data
+
+lick_num_bottle_weight <- totlicknum_and_bottle_weight %>% 
+  ggplot(aes(y = values,
+             x = weight_diff, color = exp_side)) +
+  geom_jitter() +
+  #geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Lick Number Vs. Bottle Weight Difference",
+       x = "Bottle Weight Difference (g)",
+       y = "Number of Licks") +
+  theme_bw()
+
+
+lick_num_bottle_weight
+ggsave("licknum_bottleweight_dot.png", plot = lick_num_bottle_weight)
+
+```
+```{r}
+lm <- lm(values ~ weight_diff, data = totlicknum_and_bottle_weight)
+summary(lm)
+get_regression_table(lm)
+```
+
+
+
+Starting Creation of the Lick Duration vs. Weight Difference Plot
+
+Filtering totals data for what we are interested in (LickDuration)
+```{r}
+# Filtering for Lick Duration only
+totals_11_8 %>%
+  filter(measure_type == "LickDuration") -> totals_11_8_lickdur
+
+totals_11_12 %>%
+  filter(measure_type == "LickDuration") -> totals_11_12_lickdur
+
+totals_11_15 %>%
+  filter(measure_type == "LickDuration") -> totals_11_15_lickdur
+
+totals_11_18 %>%
+  filter(measure_type == "LickDuration") -> totals_11_18_lickdur
+
+# Combining the lickdur tibbles into one 
+rbind(totals_11_8_lickdur, totals_11_12_lickdur, totals_11_15_lickdur, totals_11_18_lickdur) -> lickduration
+
+# join with bottle weights data
+left_join(lickduration, bottle_weights) -> totlickdur_and_bottle_weight
+
+```
+Plotting the relationship between lick duration and bottle weight difference
+
+```{r}
+lick_dur_bottle_weight <- totlickdur_and_bottle_weight %>% 
+  ggplot(aes(y = values,
+             x = weight_diff, color = exp_side)) +
+  geom_jitter() +
+  #geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Lick Duration Vs. Bottle Weight Difference",
+       x = "Bottle Weight Difference (g)",
+       y = "Lick Duration (ms)") +
+  theme_bw()
+
+
+lick_dur_bottle_weight
+ggsave("lickdur_bottleweight_dot.png", plot = lick_dur_bottle_weight)
+```
+
+
+
+
+
+Scatter plot for Lick Number and Lick Duration
+
+```{r}
+
+head(lickduration)
+licknums %>%
+  rename(licknums = values) %>%
+  select(-measure_type) -> licknums
+
+lickduration %>%
+  rename(lickduration = values)%>%
+  select(-measure_type) -> lickduration
+
+left_join(licknums, lickduration) -> licknums_and_dur
+```
+Scatter plot
+
+```{r}
+licknum_dur <- licknums_and_dur %>% 
+  ggplot(aes(y = licknums,
+             x = lickduration)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Lick Number Vs. Lick Duration",
+       x = "Total Lick Duration (sec)",
+       y = "Total Lick Number") +
+  theme_bw()
+
+
+licknum_dur
+ggsave("licknum_dur_mod.png", plot = licknum_dur)
+
+```
+Extracting ONLY BOUT NUMBER
+
+```{r}
+totals_11_8 %>%
+  filter(measure_type == "BoutNumber") -> totals_11_8_boutnum
+
+totals_11_12 %>%
+  filter(measure_type == "BoutNumber") -> totals_11_12_boutnum
+
+totals_11_15 %>%
+  filter(measure_type == "BoutNumber") -> totals_11_15_boutnum
+
+totals_11_18 %>%
+  filter(measure_type == "BoutNumber") -> totals_11_18_boutnum
+
+rbind(totals_11_8_boutnum, totals_11_12_boutnum, totals_11_15_boutnum, totals_11_18_boutnum) -> boutnum
+
+
+```
+
+Extracting ONLY BOUT DURATION
+
+```{r}
+totals_11_8 %>%
+  filter(measure_type == "BoutDuration") -> totals_11_8_boutdur
+
+totals_11_12 %>%
+  filter(measure_type == "BoutDuration") -> totals_11_12_boutdur
+
+totals_11_15 %>%
+  filter(measure_type == "BoutDuration") -> totals_11_15_boutdur
+
+totals_11_18 %>%
+  filter(measure_type == "BoutDuration") -> totals_11_18_boutdur
+
+rbind(totals_11_8_boutdur, totals_11_12_boutdur, totals_11_15_boutdur, totals_11_18_boutdur) -> boutdur
+
+```
+
+Combining bout num and bout dur
+
+```{r}
+boutnum %>%
+  rename(boutnums = values) %>%
+  select(-measure_type) -> boutnum
+
+boutdur %>%
+  rename(boutduration = values)%>%
+  select(-measure_type) -> boutdur
+
+left_join(boutnum, boutdur) -> boutnum_boutdur
+```
+Plotting Bout Number vs Bout Duration
+
+```{r}
+boutnum_boutdur_plot <- boutnum_boutdur %>% 
+  ggplot(aes(y = boutnums,
+             x = boutduration)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Bout Number Vs. Bout Duration",
+       x = "Total Bout Duration (sec)",
+       y = "Total Bout Number") +
+  theme_bw()
+
+
+boutnum_boutdur_plot
+ggsave("boutnum_boutdur_plot.png", plot = boutnum_boutdur_plot)
+```
+
+
+
+
+

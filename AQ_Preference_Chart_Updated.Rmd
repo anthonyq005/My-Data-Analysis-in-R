@@ -1,0 +1,306 @@
+---
+title: "AQ_Preference_Chart_Updated"
+output: html_document
+date: "2024-12-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(dbplot)
+library(stringr)
+library(tidyr)
+library(GGally)
+library(skimr)
+library(moderndive)
+library(readxl)
+```
+
+
+(OLD) Importing Data
+
+```{r}
+# Set working directory as the Data Files folder
+library(readr)
+#filt_master_liq_long <- read_csv("filt_master_liqhd_longer.csv")
+
+liqhd_data_11_12 <- read_csv("24111201.CSV")
+liqhd_data_11_18 <- read_csv("24111800.CSV")
+liqhd_data_11_20 <- read_csv("24112000.CSV")
+liqhd_data_11_201 <- read_csv("24112001.CSV")
+liqhd_data_11_22 <- read_csv("24112200.CSV",  col_select = -...220)
+liqhd_data_11_25 <- read_csv("24112500.CSV",  col_select = -...220)
+liqhd_data_11_27 <- read_csv("24112700_edited.CSV")
+
+rbind(liqhd_data_11_12, liqhd_data_11_18, liqhd_data_11_20, liqhd_data_11_201, liqhd_data_11_22, liqhd_data_11_25, liqhd_data_11_27) -> master_liqhd_data
+
+write_csv(master_liqhd_data, file = "master_liqhd_data.csv")
+```
+
+Importing Master Data Set
+```{r}
+library(readr)
+master_liqhd_data <- read_csv("master_liqhd_data.csv")
+
+```
+
+Making Master Dataset Longer
+
+```{r}
+master_liqhd_data %>% 
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>% 
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>% 
+  select(datetime, mouse_id, exp_side, measure_type, values) -> master_liqhd_longer
+
+```
+
+(OLD) Filtering the imported data to remove empty cages
+
+```{r}
+liqhd_data_11_12 %>% 
+  select(-matches("27|28|35|36")) %>% # remove cage 14, 18
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> liqhd_data_11_12
+  
+
+liqhd_data_11_18 %>% 
+  select(-matches("35|36")) %>% # remove cage 18
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> liqhd_data_11_18
+
+liqhd_data_11_20 %>% 
+  select(-matches("27|28|35|36")) %>% # remove cage 14, 18
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> liqhd_data_11_20
+
+liqhd_data_11_201 %>% 
+  select(-matches("27|28|35|36")) %>% # remove cage 14, 18
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> liqhd_data_11_201
+
+liqhd_data_11_22 %>% 
+  select(-matches("27|28|35|36")) %>% # Remove cage 14, 18
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> liqhd_data_11_22
+
+liqhd_data_11_25 %>% 
+  select(-matches("15|16|27|28|35|36")) %>% # remove cage 8, 14, 18
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> liqhd_data_11_25
+
+liqhd_data_11_27 %>% 
+  select(-matches("7|8|15|16|27|28|35|36")) %>% 
+  select(-Experimental_side, -millis) %>% 
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>%
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>%
+  select(datetime, mouse_id, exp_side, measure_type, values) -> liqhd_data_11_27
+
+rbind(liqhd_data_11_12, liqhd_data_11_18, liqhd_data_11_20,liqhd_data_11_201, liqhd_data_11_22, liqhd_data_11_25, liqhd_data_11_27) -> filt_master_liq_longer
+
+write_csv(filt_master_liq_longer, file = "filt_master_liqhd_longer.csv")
+
+  
+```
+
+Filtering Longer Data to remove empty cages AND making hour column
+
+```{r}
+master_liqhd_longer %>%
+  filter(!(mouse_id %in% c(4,8,14,18))) %>%
+  mutate(datetime = ymd_hms(datetime)) %>%
+  mutate(hour = floor_date(datetime, "hour"))-> filt_liqhd_longer
+```
+
+(OLD) Creating Hour Column
+
+```{r}
+filt_master_liq_long %>%
+  mutate(datetime = ymd_hms(datetime)) %>%
+  mutate(hour = floor_date(datetime, "hour")) -> filt_master_liq_long
+
+head(filt_master_liq_long)
+```
+
+Creating a Treatment Column
+
+```{r}
+filt_liqhd_longer %>%
+  mutate(treatment = if_else(mouse_id %in% c(1,3,6,7,11,14,15,16), "Water", "Alchohol")) %>%
+  select(datetime, hour, treatment, everything()) -> filt_liqhd_longer
+```
+
+Filtering only for Lick Number & Turning values into proportions
+
+```{r}
+filt_liqhd_longer %>%
+  filter(measure_type == "LickNumber") %>%
+  filter(exp_side == "R") %>%
+  group_by(hour, exp_side, treatment) %>%
+  summarize(total_value = sum(values)) %>%
+  rename(value = total_value) -> liqhd_licks_hour
+
+filt_liqhd_longer %>% 
+  filter(measure_type == "LickNumber") %>%
+  group_by(hour) %>%
+  summarize(total_value = sum(values)) -> liqhd_licks_hour_total
+
+left_join(liqhd_licks_hour, liqhd_licks_hour_total) %>%
+  mutate(value = value/total_value)->  licks_by_hour_props
+ 
+```
+
+(OLD) Preference Chart
+
+```{r}
+upd_preference_chart <- licks_by_hour_props %>%
+  ggplot() +
+  geom_line(mapping = aes(x = hour, y = value, color = exp_side), size = 0.75) +
+  labs(title = "Preference % Left vs. Right Side",
+       x = "Date",
+       y = "Side Preference (%)",
+       color = "Experimental Side") +
+  theme_bw() 
+ 
+upd_preference_chart
+
+ggsave("upd_preference_chart.png", plot = upd_preference_chart)
+```
+(OLD) Another chart
+```{r}
+preference_chart2 <- 
+  licks_by_hour_props %>%
+  ggplot() +
+  geom_line(mapping = aes(x = hour, y = value, color = mouse_id), size = 0.75) +
+  labs(title = "Preference % Left vs. Right Side",
+       x = "Date",
+       y = "Side Preference (%)",
+       color = "Mouse ID") +
+  theme_bw() 
+
+preference_chart2
+
+ggsave("preference_chart2.png", plot = preference_chart2)
+ 
+```
+
+(USELESS) Separating Water and Alcohol treatment groups
+
+```{r}
+licks_by_hour_props %>%
+  filter(treatment == "Water") -> licks_by_hour_props_WATER
+
+licks_by_hour_props %>% 
+  filter(treatment == "Alcohol") -> licks_by_hour_props_ALC
+
+
+```
+
+Right Side Preference chart separated by treatment group
+
+```{r}
+preference_chart <- ggplot(licks_by_hour_props, aes(x = hour, y = value)) +
+  geom_line(size = 0.7, aes(color = treatment)) +
+   scale_x_datetime(date_breaks = "1440 min", date_labels = "%m/%d") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_line(aes(y = 0.5), color = "black") +
+  labs(title = "Right Side Preference (Alcohol vs. Water Group)",
+       x = "Time (Hours)",
+       y = "Preference %",
+       color = "Treatment Group") +
+  geom_rect(aes(xmin = as.POSIXct("2024-11-15 06:00:00"),
+                xmax = as.POSIXct("2024-11-18 06:00:00"),
+                ymin = -Inf,
+                ymax = Inf),
+            alpha = 0.01) 
+
+
+preference_chart 
+
+ggsave("preference_chart_treatment.png", plot = preference_chart)
+
+```
+
+Preparing lick props for for facet wrap (Same code as above, but includes mouse_id in group_by)
+
+```{r}
+filt_liqhd_longer %>%
+  filter(measure_type == "LickNumber") %>%
+  filter(exp_side == "R") %>%
+  group_by(hour, exp_side, treatment, mouse_id) %>%
+  summarize(total_value = sum(values)) %>%
+  rename(value = total_value) -> liqhd_licks_hour
+
+filt_liqhd_longer %>% 
+  filter(measure_type == "LickNumber") %>%
+  group_by(hour, mouse_id) %>%
+  summarize(total_value = sum(values)) -> liqhd_licks_hour_total
+
+left_join(liqhd_licks_hour, liqhd_licks_hour_total) %>%
+  mutate(value = value/total_value)->  licks_by_hour_props
+```
+
+
+Using facet_wrap to see individual mouse Right side Preference
+
+```{r}
+facet_wrap_pref_chart <- 
+  ggplot(licks_by_hour_props,
+         aes(x = hour,
+             y = value)) +
+  geom_line(aes(color = treatment)) +
+  facet_wrap(licks_by_hour_props$mouse_id) +
+  scale_x_datetime(date_breaks = "5760 min",
+                   date_labels = "%m/%d") +
+  theme(axis.text.x = element_text(angle = 45,
+                                   hjust = 1)) +
+  geom_line(aes(y = 0.5),
+            color = "black") +
+  labs(title = "Right Side Preference (Alcohol vs. Water Group)",
+       subtitle = "Separated by Mouse ID",
+       color = "Treatment Group",
+       x = "Time (Hours)",
+       y = "Preference %") +
+   geom_rect(alpha = 0.01, aes(xmin = as.POSIXct("2024-11-15 12:00:00"),
+                xmax = as.POSIXct("2024-11-18 12:00:00"),
+                ymin = -Inf,
+                ymax = Inf))
+
+facet_wrap_pref_chart
+
+ggsave("facet_wrap_pref_chart.png", plot = facet_wrap_pref_chart)
+
+```
+
+
