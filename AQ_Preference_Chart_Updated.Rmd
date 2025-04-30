@@ -43,8 +43,14 @@ write_csv(master_liqhd_data, file = "master_liqhd_data.csv")
 Importing Master Data Set
 ```{r}
 library(readr)
-master_liqhd_data <- read_csv("master_liqhd_data.csv")
 
+### FOR AT HOME PC
+master_liqhd_data <- read_csv("C:/Users/antho/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files/master_liqhd_data.csv")
+
+### FOR LAB PC
+master_liqhd_data <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/master_liqhd_data.csv")
+
+#tail(master_liqhd_data)
 ```
 
 Making Master Dataset Longer

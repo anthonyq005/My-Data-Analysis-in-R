@@ -1,0 +1,140 @@
+---
+title: "AQ_NEW_liqhd_preference"
+output: html_document
+date: "2025-02-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(dbplot)
+library(stringr)
+library(tidyr)
+library(GGally)
+library(skimr)
+library(moderndive)
+library(readxl)
+
+# Lab PC
+knitr::opts_knit$set(root.dir = normalizePath("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files"))
+
+# For PC
+knitr::opts_knit$set(root.dir = normalizePath("C:/Users/antho/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files"))
+
+# For Laptop
+knitr::opts_knit$set(root.dir = normalizePath("C:/Users/Thinkpad-X1/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files"))
+```
+
+Importing new data
+
+```{r}
+library(readr)
+data_1.28 <- read_csv("25012807.csv", col_select = -...220) 
+# For some reason data file always comes with random "...220" column full of NAs
+```
+
+
+Pivoting Data into longer format 
+
+```{r}
+head(data_1.28)
+
+
+# Turning datetime column into actual date-type object
+data_1.28 %>% 
+  mutate(datetime = ymd_hms(datetime)) -> data_1.28
+
+# Pivoting the entire data set into longer format
+data_1.28 %>% 
+  select(-Experimental_side, -millis) %>% # Remove the cols we don't want
+  pivot_longer(!datetime, values_to = "values", names_to = "names") %>% 
+  mutate(mouse_id = (parse_number(names) + 1) %/% 2 ) %>% 
+  mutate(measure_type = gsub("[[:digit:]]", "", names)) %>%
+  mutate(exp_side = ifelse(parse_number(names) %% 2 == 0, "R", "L")) %>% 
+  select(datetime, mouse_id, exp_side, measure_type, values) -> longer_data
+
+
+```
+
+Creating Hour Column
+
+```{r}
+longer_data %>%
+  mutate(hour = floor_date(datetime, "hour")) %>% 
+  select(datetime, hour, everything()) -> longer_data
+
+```
+
+
+Filtering longer data for only mice we want (1-6) AND classifying each mouse empty vs experimental
+
+```{r}
+longer_data %>%
+  filter(mouse_id <= 6) %>%
+  mutate(treatment = ifelse(mouse_id == 6, "Empty", "Experimental")) %>% 
+  select(datetime, hour, treatment, everything()) -> longer_data_filt
+```
+
+Turning lick numbers into proportions
+  a) Finding Total number of licks (regardless of exp side)
+```{r}
+# finding total licks per hour for each mice (left + right lick nums)
+longer_data_filt %>% 
+  filter(measure_type == "LickNumber") %>%
+  group_by(hour, mouse_id, measure_type, treatment) %>%
+  summarize(total_value = sum(values)) -> licks_total 
+
+
+#right_join(licks_longer_filt, licks_total) -> licks_total # Adding totals column to longer dataset 
+
+#licks_total %>%
+  #mutate(lick_prop = round((values/total_value), 4)) -> licks_prop # Dividing values col by total values col to get proportion
+
+```
+  b) Finding total number of LEFT (experimental side) licks 
+
+```{r}
+longer_data_filt %>%
+  filter(measure_type == "LickNumber") %>%
+  filter(exp_side == "L") %>% 
+  group_by(hour, mouse_id) %>% 
+  summarize(left_licks = sum(values)) -> left_licks_total
+
+```
+  c) Combining the previous 2 tibbles to get left lick proportion
+  
+```{r}
+left_join(left_licks_total, licks_total) %>% 
+  mutate(lick_prop = round((left_licks/total_value), 4)) -> licks_prop_hour
+```
+
+
+Plotting Left Preference
+
+```{r}
+pref_chart <- ggplot(licks_prop_hour, aes(x = hour, y = lick_prop)) +
+  geom_line(aes(color = treatment), size = 1.2, alpha = 0.8) +
+  facet_wrap(~ mouse_id, scales = "free_y") +
+  geom_line(aes(y = 0.5), color = "black") +
+  labs(title = "Left Side Preference (Experimental vs. Empty Cages)",
+       subtitle = "Separated by Mouse ID",
+       color = "Treatment Group",
+       x = "Time (Hours)",
+       y = "Preference %") +
+    scale_x_datetime(date_breaks = "2 hours", date_labels = "%H:%M") +  # Label every 2 hours
+  #theme_minimal(base_size = 14) + 
+  theme(panel.grid.major = element_line(color = "grey80", linetype = "dashed"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top",
+        strip.background = element_rect(fill = "lightgrey", color = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+  #facet_wrap(licks_prop_hour$mouse_id)
+
+pref_chart
+ggsave("NEW_preference_chart.png", plot = pref_chart)
+# Problem with the chart is that some points in data have 0s for value, thus making a proportion greater than 1
+```
+

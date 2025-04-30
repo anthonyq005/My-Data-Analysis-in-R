@@ -1,0 +1,151 @@
+---
+title: "LIQHD_New_Correlation_fortest"
+output: html_document
+date: "2025-02-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(dbplot)
+library(stringr)
+library(tidyr)
+library(GGally)
+library(skimr)
+library(moderndive)
+library(readxl)
+library(ggpubr)
+
+knitr::opts_knit$set(root.dir = normalizePath("C:/Users/antho/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files"))
+
+```
+
+Importing data
+
+```{r}
+library(readr)
+data <- read_csv("C:/Users/antho/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files/1.28.25 LIQ HD Testing.csv")
+
+# Turning datetime column into datetime object
+data %>%
+   mutate(datetime = mdy_hms(datetime)) -> data
+```
+Pivoting the tibble
+
+```{r}
+data %>%
+  pivot_longer(cols = starts_with("delta_weight") | starts_with("total_licks"),
+               names_to = "names", values_to = "values") %>% 
+   mutate(exp_side = ifelse(str_detect(names, "left"), "L", "R")) %>%
+   mutate(names = ifelse(str_detect(names, "delta_weight"), substr(names, 1, 12), substr(names, 1, 11))) %>% 
+   pivot_wider(names_from = names, values_from = values) -> changed_data
+
+
+```
+
+Plotting on ggplot
+
+```{r}
+correlation1 <- 
+   ggplot(changed_data, aes(x = delta_weight, y = total_licks, color = exp_side)) +
+   geom_jitter(size = 3, alpha = 0.6, width = 0.1, height = 10) +
+   geom_smooth(method = "lm", aes(group = exp_side)) +
+   labs(title = "Correlation Between Bottle Weight Difference and Total Licks", 
+        x = "Delta Weight (g)", 
+        y = "Total Licks",
+        color = "Experimental Side") +
+  theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),  # Centered and bold title
+        legend.position = "top") + 
+  stat_cor(aes(label = paste(..rr.label.., sep = "")), method = "pearson")   # Adds R² value
+  
+
+correlation1
+
+ggsave("correlation1.png", correlation1)
+
+```
+Making new correlation plot, ignoring negative values
+
+```{r}
+changed_data %>%
+   filter(delta_weight >= 0) -> no_neg_data
+
+```
+
+Plotting new tibble
+
+```{r}
+correlation2 <- 
+   ggplot(no_neg_data, aes(x = delta_weight, y = total_licks, color = exp_side)) +
+   geom_jitter(size = 3, alpha = 0.6, width = 0.1, height = 10) +
+   geom_smooth(method = "lm", aes(group = exp_side)) +
+   labs(title = "Correlation Between Bottle Weight Difference and Total Licks", 
+        x = "Delta Weight (g)", 
+        y = "Total Licks",
+        color = "Experimental Side") +
+  theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),  # Centered and bold title
+        legend.position = "top") + 
+  stat_cor(aes(label = paste(..rr.label.., sep = "")), method = "pearson")   # Adds R² value
+  
+
+correlation2
+
+ggsave("correlation2.png", correlation2)
+```
+Separating Left and Right data
+
+```{r}
+no_neg_data %>%
+   filter(exp_side == "L") -> no_neg_LEFT
+
+no_neg_data %>%
+   filter(exp_side == "R") -> no_neg_RIGHT
+```
+
+Making separate plots for left and right
+
+```{r}
+left_correlation <- 
+   ggplot(no_neg_LEFT, aes(x = delta_weight, y = total_licks, color = exp_side)) +
+   geom_jitter(size = 3, alpha = 0.6, width = 0.1, height = 10) +
+   geom_smooth(method = "lm", aes(group = exp_side)) +
+   labs(title = "Correlation Between Bottle Weight Difference and Total Licks", 
+        x = "Delta Weight (g)", 
+        y = "Total Licks",
+        color = "Experimental Side") +
+  theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),  # Centered and bold title
+        legend.position = "top") + 
+  stat_cor(aes(label = paste(..rr.label.., sep = "")), method = "pearson")   # Adds R squared value
+  
+
+left_correlation
+
+ggsave("left_correlation.png", left_correlation)
+```
+Right Side
+
+```{r}
+right_correlation <- 
+   ggplot(no_neg_RIGHT, aes(x = delta_weight, y = total_licks)) +
+   geom_jitter(size = 3, alpha = 0.6, width = 0.1, height = 10, color = "#85c5e9") +
+   geom_smooth(method = "lm", aes(group = exp_side)) +
+   labs(title = "Correlation Between Bottle Weight Difference and Total Licks", 
+        x = "Delta Weight (g)", 
+        y = "Total Licks",
+        color = "Experimental Side") +
+  theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),  # Centered and bold title
+        legend.position = "top") + 
+  stat_cor(aes(label = paste(..rr.label.., sep = "")), method = "pearson")   # Adds R squared value
+  
+
+right_correlation
+
+ggsave("right_correlation.png", right_correlation)
+```
+
