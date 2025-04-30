@@ -1,0 +1,529 @@
+---
+title: "AQ_Cell_counts"
+output: html_document
+date: "2025-03-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(plotly) # Turns visualizations interactive
+library(moderndive)
+library(readxl)
+#library(ggpubr)
+library(RColorBrewer)
+library(devtools)
+library(Routliers)
+library(htmlwidgets)
+
+#knitr::opts_knit$set(root.dir = normalizePath("C:/Users/antho/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files"))
+
+# For Laptop
+setwd("C:/Users/Thinkpad-X1/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files")
+
+
+```
+
+Importing data
+
+```{r}
+library(readr)
+# PC
+cell_counts <- read_csv("C:/Users/antho/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files/CREST20X_data_6.csv")
+
+# Lab PC
+cell_counts <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/CREST20X_data_6.csv")
+
+# Laptop
+cell_counts <- read_csv("C:/Users/Thinkpad-X1/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files/CREST20X_data_6.csv")
+
+```
+
+(FIRST STEP) Averaging cell density between left and right hemispheres
+
+```{r}
+
+# Avg between hemispheres for DAPI, CC1, ASPA density
+cell_counts %>%
+  group_by(Season, `Bregma(mm)`, ROI, MouseID) %>%
+  summarize(mean(TotalDAPIDensitymm2), mean(TotalCC1Densitymm2), mean(TotalASPADensitymm2)) -> avg_density
+
+# Renaming the columns for cleanliness
+avg_density %>%
+  rename(DAPIdensity = `mean(TotalDAPIDensitymm2)`) %>%
+  rename(CC1density = `mean(TotalCC1Densitymm2)`) %>%
+  rename(ASPAdensity = `mean(TotalASPADensitymm2)`) -> avg_density
+
+```
+
+
+Manipulate tibble to longer format
+
+```{r}
+long_data <- avg_density %>%
+  pivot_longer(cols = c(DAPIdensity, CC1density, ASPAdensity), # Adjust these if different
+               names_to = "Cell_Type",
+               values_to = "Densities")
+
+#write.csv(long_data, file = "cellCountslongData.csv")
+```
+
+
+Splitting data between ROIs
+
+```{r}
+cell_counts %>%
+   filter(ROI == "CC") -> CC_group
+
+cell_counts %>%
+   filter(ROI == "Cg") -> Cg_group
+```
+
+
+(FIXME) Making function to identify outliers in data
+
+```{r}
+cell_counts %>%
+   select(ROI,`Total DAPI`, bregma_group) %>%
+   group_by(ROI, bregma_group) %>%
+   summarize(Q1 = quantile(`Total DAPI`, 0.25),
+             Q3 = quantile(`Total DAPI`, 0.75),
+             IQR = Q3 - Q1,
+             lower_bound = Q1 - 1.5 * IQR,
+             upper_bound = Q3 + 1.5 * IQR)
+      
+
+
+
+
+
+
+find_outlier <- function(df, values_col, groups_col) {
+   df %>%
+      group_by(groups_col) %>%
+      summarize(Q1 = quantile(value_col, 0.25, na.rm = TRUE), 
+             Q3 = quantile(value_col, 0.75, na.rm = TRUE),
+             IQR = Q3 - Q1,
+             lower_bound = Q1 - 1.5 * IQR,
+             upper_bound = Q3 + 1.5 * IQR,
+             is_outlier = ifelse((value_col < lower_bound | value_col > upper_bound), 1, 0)) %>%
+      filter(is_outlier == 1)
+}
+
+
+
+```
+
+
+Plotting Data without removing outliers
+
+```{r}
+cell_counts %>%
+   mutate(`Bregma(mm)` = as.factor(`Bregma(mm)`)) -> cell_counts # Turns Bregma into a categorical variable
+
+cell_counts %>%
+   mutate(bregma_group = interaction(`Bregma(mm)`, Group, sep = "mm | ")) -> cell_counts
+
+
+plot <- ggplot(data = cell_counts, aes(y = TotalDAPIDensitymm2, x = bregma_group, fill = bregma_group)) +
+   facet_wrap("ROI") +
+   geom_boxplot() +
+   theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+   theme(plot.title = element_text(hjust = 0.5),  
+        legend.position = "top") +
+  labs(title = "Total DAPI Density (mm^2) by Group",
+       x = "Bregma (mm)",
+       y = "Total DAPI Density (mm^2)") +
+   theme(panel.grid.major = element_line(color = "grey80", linetype = "dashed"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top",
+        strip.background = element_rect(fill = "lightgrey", color = "black")) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         strip.text = element_text(size = 14),
+         legend.position = "top") +
+   theme(plot.margin = margin(10, 10, 40, 10)) +  # Increase bottom margin
+   theme(axis.title.x = element_text(margin = margin(t = 30))) 
+
+   
+ggplotly(plot)  
+
+
+saveWidget(ggplotly(plot), "interactive_plot2.html", selfcontained = TRUE)
+
+```
+
+
+Same thing but separated by Group
+(cc group)
+```{r}
+cell_counts %>%
+   mutate(bregma_group = interaction(`Bregma(mm)`, Group, sep = "mm | ")) -> cell_counts
+          
+cc_plot <- ggplot(data = CC_group, aes(y = TotalDAPIDensitymm2, x = bregma_group, fill= bregma_group)) +
+   #facet_wrap("ROI") +
+   geom_boxplot() +
+   theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+   theme(plot.title = element_text(hjust = 0.5),  
+        legend.position = "top") +
+  labs(title = "DAPI Density (mm^2) (CC Group)",
+       x = "Bregma (mm)",
+       y = "Total DAPI") +
+   theme(panel.grid.major = element_line(color = "grey80", linetype = "dashed"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top",
+        strip.background = element_rect(fill = "lightgrey", color = "black")) +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         strip.text = element_text(size = 14),
+         legend.position = "top") +
+   theme(plot.margin = margin(10, 10, 40, 10)) +  # Increase bottom margin
+   theme(axis.title.x = element_text(margin = margin(t = 20))) 
+
+   
+   
+ggplotly(cc_plot)  
+saveWidget(ggplotly(cc_plot), "interactive_plot.html", selfcontained = TRUE)
+
+```
+
+
+Same thing but separated by Group
+(cg group)
+```{r}
+cg_plot <- ggplot(data = Cg_Group, aes(y = `Total DAPI`, x = bregma_group, fill= bregma_group)) +
+   #facet_wrap("ROI") +
+   geom_boxplot() +
+   theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+   theme(plot.title = element_text(hjust = 0.5),  
+        legend.position = "top") +
+  labs(title = "Cell Count (Cg Group)",
+       x = "Bregma (mm)",
+       y = "Total DAPI") +
+   theme(panel.grid.major = element_line(color = "grey80", linetype = "dashed"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top",
+        strip.background = element_rect(fill = "lightgrey", color = "black")) +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         strip.text = element_text(size = 14),
+         legend.position = "top") +
+   theme(plot.margin = margin(10, 10, 40, 10)) +  # Increase bottom margin
+   theme(axis.title.x = element_text(margin = margin(t = 20))) 
+
+   
+   
+ggplotly(cg_plot)  
+```
+
+
+Checking spreadsheet
+
+```{r}
+max(cell_counts$TotalDAPIDensitymm2)
+
+# THIS IS THE MISSING STEP
+# Avg between hemispheres for DAPI density
+cell_counts %>%
+  group_by(Group, `Bregma(mm)`, ROI, MouseID) %>%
+  summarize(mean(TotalDAPIDensitymm2)) -> avg_hemisphere
+
+# Avg between hemispheres for CC1 density
+cell_counts %>%
+  group_by(Group, `Bregma(mm)`, ROI, MouseID) %>%
+  summarize(mean(TotalCC1Densitymm2)) -> avg_hemisphere
+
+
+```
+
+
+NEW PLOT (After calculating average DAPI Density between the 2 hemispheres)
+
+```{r}
+avg_hemisphere %>%
+   mutate(bregma_group = interaction(`Bregma(mm)`, Group, sep = "mm | ")) -> avg_hemisphere
+
+plot_avg <- ggplot(data = avg_hemisphere, aes(y = `mean(TotalCC1Densitymm2)`, x = bregma_group, fill = bregma_group)) +
+   facet_wrap("ROI") +
+   geom_boxplot() +
+   theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+   theme(plot.title = element_text(hjust = 0.5),  
+        legend.position = "top") +
+  labs(title = "Total CC1 Density (mm^2) by Group",
+       x = "Bregma (mm) and Treatment",
+       y = "Total CC1 Density (mm^2)") +
+   theme(panel.grid.major = element_line(color = "grey80", linetype = "dashed"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top",
+        strip.background = element_rect(fill = "lightgrey", color = "black")) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         strip.text = element_text(size = 14),
+         legend.position = "top") +
+   theme(plot.margin = margin(10, 10, 40, 10)) +  # Increase bottom margin
+   theme(axis.title.x = element_text(margin = margin(t = 30))) 
+
+   
+ggplotly(plot_avg) 
+
+saveWidget(ggplotly(plot_avg), "plot_avg.html", selfcontained = TRUE)
+
+
+```
+
+
+
+Splitting between Seasons
+
+```{r}
+avg_density %>%
+  filter(Season == "Fall") -> fall
+
+long_data %>%
+  filter(Season == "Spring") -> spring
+
+long_data %>%
+  filter(Season == "Summer") -> summer
+
+long_data %>%
+  filter(Season == "Winter") -> winter
+
+```
+
+
+(OLD) Trying Routliers package 
+
+```{r}
+
+# DAPI Outliers per Season
+outliers_mad(x = fall$DAPIdensity, threshold = 2) -> DAPIfall_outlier_info
+outliers_mad(x = spring$DAPIdensity, threshold = 2) -> DAPIspring_outlier_info
+outliers_mad(x = summer$DAPIdensity, threshold = 2) -> DAPIsummer_outlier_info
+outliers_mad(x = winter$DAPIdensity, threshold = 2) -> DAPIwinter_outlier_info
+# Threshold argument controls number of MAD plus or minus the median to consider an outlier
+
+# CC1 Outliers per Season
+outliers_mad(x = fall$CC1density, threshold = 2) -> CC1fall_outlier_info
+outliers_mad(x = spring$CC1density, threshold = 2) -> CC1spring_outlier_info
+outliers_mad(x = summer$CC1density, threshold = 2) -> CC1summer_outlier_info
+outliers_mad(x = winter$CC1density, threshold = 2) -> CC1winter_outlier_info
+
+# ASPA Outliers Per Season
+outliers_mad(x = fall$ASPAdensity, threshold = 2) -> ASPAfall_outlier_info
+outliers_mad(x = spring$ASPAdensity, threshold = 2) -> ASPAspring_outlier_info
+outliers_mad(x = summer$ASPAdensity, threshold = 2) -> ASPAsummer_outlier_info
+outliers_mad(x = winter$ASPAdensity, threshold = 2) -> ASPAwinter_outlier_info
+
+# To extract the upper and lower bounds in variable form
+avg_density %>% 
+  mutate(DAPIoutlier = ifelse(
+    (DAPI_outlier_info$LL_CI_MAD <= AvgDAPIdensity & DAPI_outlier_info$UL_CI_MAD >= AvgDAPIdensity), 0, 1)) %>%
+  mutate(CC1outlier = ifelse(
+    (CC1_outlier_info$LL_CI_MAD <= AvgCC1density & CC1_outlier_info$UL_CI_MAD >= AvgCC1density), 0, 1)) %>%
+  mutate(ASPAoutlier = ifelse(
+    (ASPA_outlier_info$LL_CI_MAD <= AvgASPAdensity & ASPA_outlier_info$UL_CI_MAD >= AvgASPAdensity), 0, 1))-> avg_density
+```
+
+Function to automate finding outlier info
+
+```{r}
+calculate_outliers <- function(df) {
+  if (nrow(df) < 3) {  # Ensure at least 3 values for meaningful MAD calculation
+    df <- df %>%
+      mutate(Lower_Bound = NA, Upper_Bound = NA, Outlier = FALSE)
+  } else {
+    bounds <- outliers_mad(df$Densities)  # Calculate MAD-based outlier bounds
+    df <- df %>%
+      mutate(Median = bounds$Median,
+             Lower_Bound = bounds$LL_CI_MAD, 
+             Upper_Bound = bounds$UL_CI_MAD,
+             Outlier = Densities < Lower_Bound | Densities > Upper_Bound) %>% # Flag outliers
+      mutate(Outlier = ifelse(Outlier == TRUE, 1, 0))
+    
+  }
+  return(df)
+}
+
+long_data %>%
+  group_by(Season, `Bregma(mm)`, Cell_Type, ROI) %>%
+  group_modify(~ calculate_outliers(.x)) %>%
+  ungroup() -> all_outlier_info
+
+# Checking correctness
+avg_density %>%
+  filter(Season == "Fall") %>%
+  filter(`Bregma(mm)` == 0.9) %>%
+  filter(ROI == "CC") %>%
+  filter(MouseID == "M4613")
+
+
+```
+
+
+
+Visualizing number of outliers +/- 2 MAD from the median value
+
+```{r}
+dapi <- outliers_mad(x = avg_density$AvgDAPIdensity, threshold = 2)
+plot_outliers_mad(dapi, x = avg_density$AvgDAPIdensity)
+
+cc1 <- outliers_mad(x = avg_density$AvgCC1density, threshold = 2)
+plot_outliers_mad(cc1, x = avg_density$AvgDAPIdensity)
+
+aspa <- outliers_mad(x = avg_density$AvgASPAdensity, threshold = 2)
+plot_outliers_mad(aspa, x = avg_density$AvgDAPIdensity)
+```
+
+
+
+Creating an interaction column between Season and Bregma
+
+```{r}
+avg_density %>%
+   mutate(bregma_group = interaction(`Bregma(mm)`, Season, sep = "mm | ")) -> avg_density
+
+long_data %>%
+   mutate(bregma_group = interaction(`Bregma(mm)`, Season, sep = "mm | ")) -> long_data
+
+all_outlier_info %>%
+   mutate(bregma_group = interaction(`Bregma(mm)`, Season, sep = "mm | ")) -> all_outlier_info
+```
+
+(DAPI)
+Starting cell counts plot INCLUDING geom jitter for outliers
+
+```{r}
+plot_avg_DAPI <- ggplot(data = (all_outlier_info%>% filter(Cell_Type == "DAPIdensity")),
+                        aes(y = Densities,
+                            x = bregma_group,
+                            fill = bregma_group)) +
+  # Plotting data spread
+  geom_boxplot(outliers = FALSE) +
+  
+  # Plotting non-outliers
+  geom_jitter(data = (all_outlier_info %>%
+                        filter(Cell_Type == "DAPIdensity") %>%
+                        filter(Outlier == "0")),
+              color = "black",
+              shape = 1) + 
+  facet_wrap("ROI") +
+  
+  # Plotting outliers
+  geom_jitter(data = all_outlier_info %>%
+                filter(Outlier == 1) %>%
+                filter(Cell_Type == "DAPIdensity"), color = "red") +
+  
+  # Labels
+  labs(title = "Total DAPI Density (mm^2) by Group",
+       x = "Bregma (mm) and Treatment",
+       y = "Total DAPI Density (mm^2)") +
+  
+  # Visual Changes
+  scale_fill_grey(start = 0.8, end = 0.2) +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) 
+
+  
+
+plot_avg_DAPI
+
+#ggplotly(plot_avg_DAPI)
+
+saveWidget(ggplotly(plot_avg_DAPI), "DAPIplot.html", selfcontained = TRUE)
+```
+(Useless)
+```{r}
+p <- ggplotly(plot_avg_DAPI)
+
+# Iterate over each trace and disable the outlier points if the trace has the 'boxpoints' attribute
+for (i in seq_along(p$x$data)) {
+  if (!is.null(p$x$data[[i]]$boxpoints)) {
+    p$x$data[[i]]$boxpoints <- "false"
+  }
+}
+
+# Display the updated plot
+p
+```
+
+
+
+(CC1)
+
+```{r}
+plot_avg_CC1 <- ggplot(data = (all_outlier_info%>% filter(Cell_Type == "CC1density")),
+                        aes(y = Densities,
+                            x = bregma_group,
+                            fill = bregma_group)) +
+  geom_boxplot() +
+  facet_wrap("ROI") +
+ # stat_summary(fun = median, geom = "errorbar") + 
+  geom_jitter(data = all_outlier_info %>%
+                filter(Outlier == 1) %>%
+                filter(Cell_Type == "CC1density")) +
+  labs(title = "Total CC1 Density (mm^2) by Group",
+       x = "Bregma (mm) and Treatment",
+       y = "Total CC1 Density (mm^2)") +
+  
+
+  scale_fill_grey(start = 0.8, end = 0.2) +
+  theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(panel.grid.major = element_line(color = "grey80", linetype = "dashed"),
+        panel.grid.minor = element_blank(),
+        legend.position = "right",
+        strip.background = element_rect(fill = "lightgrey", color = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(size = 14),
+        plot.margin = margin(10, 10, 40, 10),
+        axis.title.x = element_text(margin = margin(t = 30))) 
+  
+
+plot_avg_CC1
+
+
+#ggplotly(plot_avg_CC1)
+
+saveWidget(ggplotly(plot_avg_CC1), "CC1plot.html", selfcontained = TRUE)
+```
+
+
+(ASPA)
+
+```{r}
+plot_avg_ASPA <- ggplot(data = (all_outlier_info%>% filter(Cell_Type == "ASPAdensity")),
+                        aes(y = Densities,
+                            x = bregma_group,
+                            fill = bregma_group)) +
+  facet_wrap("ROI") +
+  stat_summary(fun = median, geom = "col", width = 0.5) + 
+  geom_jitter(data = all_outlier_info %>%
+                filter(Outlier == 1) %>%
+                filter(Cell_Type == "ASPAdensity")) +
+  scale_fill_grey(start = 0.8, end = 0.2) +
+  theme_minimal(base_size = 12) +  # Modern, clean theme with larger font
+  theme(plot.title = element_text(hjust = 0.5),  
+        legend.position = "top") +
+  labs(title = "Total ASPA Density (mm^2) by Group",
+       x = "Bregma (mm) and Treatment",
+       y = "Total ASPA Density (mm^2)") +
+  theme(panel.grid.major = element_line(color = "grey80", linetype = "dashed"),
+        panel.grid.minor = element_blank(),
+        legend.position = "top",
+        strip.background = element_rect(fill = "lightgrey", color = "black")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         strip.text = element_text(size = 14),
+         legend.position = "top") +
+  theme(plot.margin = margin(10, 10, 40, 10)) +  # Increase bottom margin
+  theme(axis.title.x = element_text(margin = margin(t = 30))) 
+
+#plot_avg_DAPI
+
+ggplotly(plot_avg_ASPA)
+
+saveWidget(ggplotly(plot_avg_ASPA), "ASPAplot.html", selfcontained = TRUE)
+```
+
+
+
+

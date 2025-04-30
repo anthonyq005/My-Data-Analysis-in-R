@@ -1,0 +1,337 @@
+---
+title: "Cell_counts_Ranalysis_SOP"
+author: "Anthony Qiu"
+date: "2025-04-10"
+output: html_document
+---
+
+This block is a package check. Think of these as "mods" to help you do your analysis
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse) # Adds all data manipulation and visualization tools
+library(ggpubr) # Uses ggplot to make publication-ready visualizations
+#library(RColorBrewer) # Adds color palettes 
+#library(Routliers) # Outlier detection package
+```
+
+
+Download data here. You need a different path depending on which device you are using. 
+```{r}
+# For my personal laptop
+cell_counts <- read_csv("C:/Users/Thinkpad-X1/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files/CREST20X_data_6.csv")
+
+# Lab PC
+cell_counts <- read_csv("C:/Users/lab/OneDrive - University of Massachusetts (2)/Richardson Lab/Anthony R Files/Data Files/CREST20X_data_6.csv")
+
+# My personal PC
+cell_counts <- read_csv("C:/Users/antho/OneDrive - University of Massachusetts/Richardson Lab/Anthony R Files/Data Files/CREST20X_data_6.csv")
+
+
+```
+
+
+(STEP 1a) Averaging cell density between left and right hemispheres
+```{r}
+# Avg between hemispheres for DAPI, CC1, ASPA density
+cell_counts %>%
+  group_by(Season, `Bregma(mm)`, ROI, MouseID) %>%
+  summarize(mean(TotalDAPIDensitymm2), mean(TotalCC1Densitymm2), mean(TotalASPADensitymm2)) -> avg_density
+
+# Renaming the columns for cleanliness
+avg_density %>%
+  rename(DAPIdensity = `mean(TotalDAPIDensitymm2)`) %>%
+  rename(CC1density = `mean(TotalCC1Densitymm2)`) %>%
+  rename(ASPAdensity = `mean(TotalASPADensitymm2)`) -> avg_density
+
+```
+
+
+(STEP 1b) Manipulate tibble to longer format for easier visualization
+```{r}
+long_data <- avg_density %>%
+  pivot_longer(cols = c(DAPIdensity, CC1density, ASPAdensity), # Adjust these if different
+               names_to = "Cell_Type",
+               values_to = "Densities")
+
+```
+
+
+
+(STEP 2) Creating Median, MAD, Upper & Lower Bound, and Outlier columns using dplyr to manipulate original data frame. 
+
+What this does is that it first groups by Season, Bregma, ROI, and Cell Type and finds Median and MAD for each group. 
+ - What this would mean for our graph is that this code block computes Median and MAD for every column. 
+ 
+Then, we combine the resulting dataframe with our original "long_data" so that we can have the Median and MAD columns in the same data frame as the rest of our data; This just makes calculating outliers easier
+
+Then because we want a poorly conservative interval, this means that we would be LESS strict on what counts as an outlier. 
+```{r}
+long_data %>%
+  group_by(Season, `Bregma(mm)`, ROI, Cell_Type) %>%
+  summarize(Median = median(Densities), MAD = mad(Densities)) %>%
+  left_join(.,long_data) %>%
+  mutate(Upper_Bound = Median + 2 * MAD) %>%
+  mutate(Lower_Bound = Median - 2 * MAD) %>%
+  mutate(Outlier = ifelse(Densities < Lower_Bound | Densities > Upper_Bound, 1, 0)) -> all_outlier_info
+```
+
+
+
+(STEP 4) Creating an interaction group so that I can have a column per bregma & treatment group combination
+```{r}
+all_outlier_info %>%
+   mutate(bregma_group = interaction(`Bregma(mm)`, Season, sep = "mm | ")) -> all_outlier_info
+```
+
+
+(STEP 5a) Plot cell densities for Corpus Callosum Region of Interest
+(DAPI)
+```{r}
+dapi_cc <- ggplot(data = all_outlier_info %>%
+                    filter(Cell_Type == "DAPIdensity") %>%
+                    filter(ROI == "CC"),
+                  aes(x = bregma_group, y = Densities)) +
+  
+  geom_col(position = "dodge", aes(y = Median), fill = NA, color = "black", linewidth = 1, width = 0.75) +
+  geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), linewidth = 1, width = 0.5) +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "DAPIdensity") %>%
+                filter(ROI == "CC") %>%
+                filter(Outlier == 1),
+              width = 0.2,
+              shape = 18,
+              size = 2,
+              color = "red") +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "DAPIdensity") %>%
+                filter(ROI == "CC") %>%
+                filter(Outlier == 0),
+              width = 0.2,
+              size = 2) +
+  
+  labs(title = "Total DAPI Density by Group in Corpus Callosum",
+         x = "Bregma & Season",
+         y = "Densities (mm^2)") +
+  
+  theme_pubr() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        axis.text.x = element_text(face = "bold", angle = 45, hjust = 1),
+        axis.text.y = element_text(face = "bold"),
+        axis.line = element_line(linewidth = 1, color = "black")) +
+  coord_cartesian(ylim = c(3500, NA ))
+
+dapi_cc
+```
+
+
+(STEP 5b) Corpus Callosum
+(CC1)
+```{r}
+cc1_cc <- ggplot(data = all_outlier_info %>%
+                    filter(Cell_Type == "CC1density") %>%
+                    filter(ROI == "CC"),
+                  aes(x = bregma_group, y = Densities)) +
+  
+  geom_col(position = "dodge", aes(y = Median), fill = NA, color = "black", linewidth = 1, width = 0.75) +
+  geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), linewidth = 1, width = 0.5) +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "CC1density") %>%
+                filter(ROI == "CC") %>%
+                filter(Outlier == 1),
+              width = 0.2,
+              shape = 18,
+              size = 2,
+              color = "red") +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "CC1density") %>%
+                filter(ROI == "CC") %>%
+                filter(Outlier == 0),
+              width = 0.2,
+              size = 2) +
+  
+  labs(title = "Total CC1 Density by Group in Corpus Callosum",
+         x = "Bregma & Season",
+         y = "Densities (mm^2)") +
+  
+  theme_pubr() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        axis.text.x = element_text(face = "bold", angle = 45, hjust = 1),
+        axis.text.y = element_text(face = "bold"),
+        axis.line = element_line(linewidth = 1, color = "black"))
+
+cc1_cc
+
+```
+
+
+(STEP 5c) Corpus Callosum
+(ASPA)
+```{r}
+aspa_cc <- ggplot(data = all_outlier_info %>%
+                    filter(Cell_Type == "ASPAdensity") %>%
+                    filter(ROI == "CC"),
+                  aes(x = bregma_group, y = Densities)) +
+  
+  geom_col(position = "dodge", aes(y = Median), fill = NA, color = "black", linewidth = 1, width = 0.75) +
+  geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), linewidth = 1, width = 0.5) +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "ASPAdensity") %>%
+                filter(ROI == "CC") %>%
+                filter(Outlier == 1),
+              width = 0.2,
+              shape = 18,
+              size = 2,
+              color = "red") +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "ASPAdensity") %>%
+                filter(ROI == "CC") %>%
+                filter(Outlier == 0),
+              width = 0.2,
+              size = 2) +
+  
+  labs(title = "Total ASPA Density by Group in Corpus Callosum",
+         x = "Bregma & Season",
+         y = "Densities (mm^2)") +
+  
+  theme_pubr() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        axis.text.x = element_text(face = "bold", angle = 45, hjust = 1),
+        axis.text.y = element_text(face = "bold"),
+        axis.line = element_line(linewidth = 1, color = "black"))
+
+aspa_cc
+
+```
+
+
+(STEP 6a) Now repeat all of STEP 5 but with Cingulate Gyrus
+(DAPI)
+```{r}
+dapi_cg <- ggplot(data = all_outlier_info %>%
+                    filter(Cell_Type == "DAPIdensity") %>%
+                    filter(ROI == "Cg"),
+                  aes(x = bregma_group, y = Densities)) +
+  
+  geom_col(position = "dodge", aes(y = Median), fill = NA, color = "black", linewidth = 1, width = 0.75) +
+  geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), linewidth = 1, width = 0.5) +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "DAPIdensity") %>%
+                filter(ROI == "Cg") %>%
+                filter(Outlier == 1),
+              width = 0.2,
+              shape = 18,
+              size = 2,
+              color = "red") +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "DAPIdensity") %>%
+                filter(ROI == "Cg") %>%
+                filter(Outlier == 0),
+              width = 0.2,
+              size = 2) +
+  
+  labs(title = "Total DAPI Density by Group in Cingulate Gyrus",
+         x = "Bregma & Season",
+         y = "Densities (mm^2)") +
+  
+  theme_pubr() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        axis.text.x = element_text(face = "bold", angle = 45, hjust = 1),
+        axis.text.y = element_text(face = "bold"),
+        axis.line = element_line(linewidth = 1, color = "black")) +
+  scale_y_continuous(breaks = seq(0, 6500, by = 250)) +
+  coord_cartesian(ylim = c(3500, NA))
+ 
+dapi_cg
+```
+
+(STEP 6b) Cingulate Gyrus
+(CC1)
+```{r}
+cc1_cg <- ggplot(data = all_outlier_info %>%
+                    filter(Cell_Type == "CC1density") %>%
+                    filter(ROI == "Cg"),
+                  aes(x = bregma_group, y = Densities)) +
+  
+  geom_col(position = "dodge", aes(y = Median), fill = NA, color = "black", linewidth = 1, width = 0.75) +
+  geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), linewidth = 1, width = 0.5) +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "CC1density") %>%
+                filter(ROI == "Cg") %>%
+                filter(Outlier == 1),
+              width = 0.2,
+              shape = 18,
+              size = 2,
+              color = "red") +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "CC1density") %>%
+                filter(ROI == "Cg") %>%
+                filter(Outlier == 0),
+              width = 0.2,
+              size = 2) +
+  
+  labs(title = "Total CC1 Density by Group in Cingulate Gyrus",
+         x = "Bregma & Season",
+         y = "Densities (mm^2)") +
+  
+  theme_pubr() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        axis.text.x = element_text(face = "bold", angle = 45, hjust = 1),
+        axis.text.y = element_text(face = "bold"),
+        axis.line = element_line(linewidth = 1, color = "black"))
+
+cc1_cg
+
+```
+
+(STEP 6c) Cingulate Gyrus
+(ASPA)
+```{r}
+aspa_cg <- ggplot(data = all_outlier_info %>%
+                    filter(Cell_Type == "ASPAdensity") %>%
+                    filter(ROI == "Cg"),
+                  aes(x = bregma_group, y = Densities)) +
+  
+  geom_col(position = "dodge", aes(y = Median), fill = NA, color = "black", linewidth = 1, width = 0.75) +
+  geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), linewidth = 1, width = 0.5) +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "ASPAdensity") %>%
+                filter(ROI == "Cg") %>%
+                filter(Outlier == 1),
+              width = 0.2,
+              shape = 18,
+              size = 2,
+              color = "red") +
+  geom_jitter(data = all_outlier_info %>%
+                filter(Cell_Type == "ASPAdensity") %>%
+                filter(ROI == "Cg") %>%
+                filter(Outlier == 0),
+              width = 0.2,
+              size = 2) +
+  
+  labs(title = "Total ASPA Density by Group in Corpus Callosum",
+         x = "Bregma & Season",
+         y = "Densities (mm^2)") +
+  
+  theme_pubr() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        axis.text.x = element_text(face = "bold", angle = 45, hjust = 1),
+        axis.text.y = element_text(face = "bold"),
+        axis.line = element_line(linewidth = 1, color = "black"))
+
+aspa_cg
+
+```
+
